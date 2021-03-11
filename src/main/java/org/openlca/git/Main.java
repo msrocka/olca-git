@@ -2,8 +2,17 @@ package org.openlca.git;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
+import org.eclipse.jgit.dircache.DirCache;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
+import org.eclipse.jgit.lib.CommitBuilder;
+import org.eclipse.jgit.lib.Constants;
+import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.PersonIdent;
+import org.eclipse.jgit.lib.RefUpdate;
+import org.eclipse.jgit.lib.TreeFormatter;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
@@ -12,8 +21,36 @@ public class Main {
   public static void main(String[] args) {
     try {
 
-      printContent(new File(".git"));
+      // printContent(new File(".git"));
+      var author = new PersonIdent("msrocka", "test@some.mail.com");
 
+      var gitDir = new File("./target/testrepo");
+      var repo = new FileRepository(gitDir);
+      if (!gitDir.exists()) {
+        repo.create(true); // create a bare repo
+      }
+
+      try (var inserter = repo.newObjectInserter()) {
+        var blobID = inserter.insert(Constants.OBJ_BLOB, "test".getBytes());
+        var tree = new TreeFormatter();
+        tree.append("test.txt", FileMode.REGULAR_FILE, blobID);
+        var treeID = tree.insertTo(inserter);
+        var commit = new CommitBuilder();
+        commit.setAuthor(author);
+        commit.setCommitter(author);
+        commit.setMessage("first commit");
+        commit.setEncoding(StandardCharsets.UTF_8);
+        commit.setTreeId(treeID);
+        var commitID = inserter.insert(commit);
+
+        var ref = repo.findRef("HEAD");
+        var update = repo.updateRef(ref.getName());
+        update.setNewObjectId(commitID);
+        update.update();
+      }
+      repo.close();
+
+      printContent(gitDir);
       /*
        * var gitDir = new File("./target/.git"); Repository repo; if
        * (gitDir.exists()) { repo = new FileRepository(gitDir); } else { repo =
