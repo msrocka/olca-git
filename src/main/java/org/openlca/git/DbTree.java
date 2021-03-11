@@ -17,7 +17,7 @@ import org.openlca.util.Pair;
 
 import gnu.trove.map.hash.TLongObjectHashMap;
 
-class Tree {
+class DbTree {
 
   static class Node {
     final String name;
@@ -34,12 +34,12 @@ class Tree {
 
   private final EnumMap<ModelType, Node> roots;
 
-  private Tree() {
+  private DbTree() {
     this.roots = new EnumMap<>(ModelType.class);
   }
 
-  static Tree build(IDatabase db) {
-    var tree = new Tree();
+  static DbTree build(IDatabase db) {
+    var tree = new DbTree();
     for (var type : ModelType.values()) {
       var c = type.getModelClass();
       if (c == null
