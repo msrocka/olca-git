@@ -221,6 +221,7 @@ public class RepoWriter {
          var repo = new FileRepository(repoDir)) {
       if (!repoDir.exists()) {
         repo.create(true); // bare repo
+        //repo.create();
       }
       new RepoWriter(db, repo, committer).sync();
     } catch (Exception e) {

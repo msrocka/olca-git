@@ -11,6 +11,7 @@ import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.CategorizedEntity;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ModelType;
+import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.CategoryDescriptor;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.util.Pair;
@@ -46,8 +47,9 @@ class DbTree {
     var tree = new DbTree();
     for (var type : ModelType.values()) {
       var c = type.getModelClass();
-      if (c == null
-          || !CategorizedEntity.class.isAssignableFrom(c))
+      if (type == ModelType.CATEGORY
+        || c == null
+        || !CategorizedEntity.class.isAssignableFrom(c))
         continue;
       tree.addBranch(type, db);
     }
@@ -62,12 +64,12 @@ class DbTree {
     // index the descriptors by category
     var index = new TLongObjectHashMap<List<Descriptor>>();
     for (var d : all) {
-      if (!(d instanceof CategoryDescriptor))
+      if (!(d instanceof CategorizedDescriptor))
         continue;
-      var cd = (CategoryDescriptor) d;
+      var cd = (CategorizedDescriptor) d;
       long catID = cd.category == null
-          ? 0
-          : cd.category;
+        ? 0
+        : cd.category;
       var list = index.get(catID);
       if (list == null) {
         list = new ArrayList<>();
@@ -82,7 +84,7 @@ class DbTree {
     var root = new Node(type.name(), index.get(0));
     roots.put(type, root);
     var rootCategories = new CategoryDao(db)
-        .getRootCategories(type);
+      .getRootCategories(type);
     var queue = new ArrayDeque<Pair<Node, List<Category>>>();
     queue.add(Pair.of(root, rootCategories));
     while (!queue.isEmpty()) {
