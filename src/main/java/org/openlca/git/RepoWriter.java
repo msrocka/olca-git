@@ -25,6 +25,8 @@ public class RepoWriter {
   private final Repository repo;
   private final PersonIdent committer;
 
+  // private final byte[] FINISH_MARKER = new byte[0];
+
   public RepoWriter(
     IDatabase db,
     Repository repo,
@@ -40,6 +42,7 @@ public class RepoWriter {
     var time = System.currentTimeMillis() - start;
     System.out.printf("loaded DB tree in %.3f sec%n", time / 1000d);
 
+    start = System.currentTimeMillis();
     try (var inserter = repo.newObjectInserter()) {
 
       // build the tree
@@ -74,6 +77,9 @@ public class RepoWriter {
       var log = LoggerFactory.getLogger(getClass());
       log.error("failed to sync tree", e);
     }
+
+    time = System.currentTimeMillis() - start;
+    System.out.printf("synced the tree in %.3f sec%n", time / 1000d);
   }
 
   private ObjectId syncTree(ObjectInserter inserter, Node node) {
@@ -86,6 +92,7 @@ public class RepoWriter {
         tree.append(child.name, FileMode.TREE, childID);
       }
     }
+
     for (var d : node.content) {
       if (d.type == null || d.type.getModelClass() == null)
         continue;
@@ -95,6 +102,7 @@ public class RepoWriter {
       var data = ProtoWriter.toJson(entity, db);
       if (data == null)
         continue;
+
       try {
         var blobID = inserter.insert(Constants.OBJ_BLOB, data);
         var name = d.refId + "_" + Version.asString(d.version);
@@ -104,6 +112,7 @@ public class RepoWriter {
         log.error("failed to insert blob for " + d, e);
       }
     }
+
     try {
       return tree.insertTo(inserter);
     } catch (Exception e) {
