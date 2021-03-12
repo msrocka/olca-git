@@ -60,23 +60,7 @@ class DbTree {
     var all = db.allDescriptorsOf(type.getModelClass());
     if (all.isEmpty())
       return;
-
-    // index the descriptors by category
-    var index = new TLongObjectHashMap<List<Descriptor>>();
-    for (var d : all) {
-      if (!(d instanceof CategorizedDescriptor))
-        continue;
-      var cd = (CategorizedDescriptor) d;
-      long catID = cd.category == null
-        ? 0
-        : cd.category;
-      var list = index.get(catID);
-      if (list == null) {
-        list = new ArrayList<>();
-        index.put(catID, list);
-      }
-      list.add(cd);
-    }
+    var index = indexByCategory(all);
     if (index.isEmpty())
       return;
 
@@ -103,6 +87,26 @@ class DbTree {
         }
       }
     }
+  }
+
+  private TLongObjectHashMap<List<Descriptor>> indexByCategory(
+    List<? extends Descriptor> all) {
+    var index = new TLongObjectHashMap<List<Descriptor>>();
+    for (var d : all) {
+      if (!(d instanceof CategorizedDescriptor))
+        continue;
+      var cd = (CategorizedDescriptor) d;
+      long catID = cd.category == null
+        ? 0
+        : cd.category;
+      var list = index.get(catID);
+      if (list == null) {
+        list = new ArrayList<>();
+        index.put(catID, list);
+      }
+      list.add(cd);
+    }
+    return index;
   }
 
 }
