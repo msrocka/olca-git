@@ -217,7 +217,7 @@ public class RepoWriter {
     var committer = new PersonIdent("msrocka", "test@some.mail.com");
     var repoDir = new File("target/testrepo/.git");
 
-    try (var db = Derby.fromDataDir("ei22");
+    try (var db = Derby.fromDataDir("refdb");
          var repo = new FileRepository(repoDir)) {
       if (!repoDir.exists()) {
         repo.create(true); // bare repo

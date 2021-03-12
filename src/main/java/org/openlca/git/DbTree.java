@@ -93,9 +93,8 @@ class DbTree {
       for (var category : next.second) {
         var content = index.get(category.id);
         var childCategories = category.childCategories;
-        if (content == null
-          || content.isEmpty()
-          || childCategories.isEmpty())
+        if ((content == null || content.isEmpty())
+          && childCategories.isEmpty())
           continue;
         var child = new Node(category.name, content);
         parent.childs.add(child);
