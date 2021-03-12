@@ -38,6 +38,10 @@ class DbTree {
     this.roots = new EnumMap<>(ModelType.class);
   }
 
+  Node getRoot(ModelType type) {
+    return roots.get(type);
+  }
+
   static DbTree build(IDatabase db) {
     var tree = new DbTree();
     for (var type : ModelType.values()) {

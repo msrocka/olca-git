@@ -2,10 +2,8 @@ package org.openlca.git;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
-import org.eclipse.jgit.dircache.DirCache;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
