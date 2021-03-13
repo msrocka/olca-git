@@ -12,6 +12,8 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.persistence.jpa.jpql.EclipseLinkVersion;
+import org.eclipse.persistence.jpa.jpql.JPAVersion;
 
 public class Main {
 

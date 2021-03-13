@@ -2,6 +2,8 @@ package org.openlca.git;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executors;
 
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
@@ -17,6 +19,7 @@ import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.Version;
 import org.openlca.git.DbTree.Node;
+import org.openlca.util.Pair;
 import org.slf4j.LoggerFactory;
 
 public class RepoWriter {
@@ -93,16 +96,30 @@ public class RepoWriter {
       }
     }
 
+    var threads = Executors.newFixedThreadPool(8);
+    var dataQueue = new ArrayBlockingQueue<byte[]>(50);
+    var blobQueue = new ArrayBlockingQueue<Pair<String, ObjectId>>(50);
+    Pair<String, ObjectId> finishMarker = Pair.of(null, null);
+
     for (var d : node.content) {
       if (d.type == null || d.type.getModelClass() == null)
         continue;
-      var entity = db.get(d.type.getModelClass(), d.id);
-      if (entity == null)
-        continue ;
-      var data = ProtoWriter.toJson(entity, db);
-      if (data == null)
-        continue;
 
+      // load and convert the data set into a byte array and
+      // add it to the queue.
+      threads.submit(() -> {
+        try {
+          var entity = db.get(d.type.getModelClass(), d.id);
+          var data = ProtoWriter.toJson(entity, db);
+          dataQueue.add(data == null ? new byte[0] : data);
+        } catch (Exception e) {
+          var log = LoggerFactory.getLogger(getClass());
+          log.error("failed to convert to proto: " + d, e);
+          dataQueue.add(new byte[0]);
+        }
+      });
+
+      // get a data package and write it to the blob store
       try {
         var blobID = inserter.insert(Constants.OBJ_BLOB, data);
         var name = d.refId + "_" + Version.asString(d.version);

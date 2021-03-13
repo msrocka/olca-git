@@ -44,7 +44,7 @@ final class ProtoWriter {
   private ProtoWriter() {
   }
 
-  public static byte[] toProto(RootEntity entity, IDatabase db) {
+  static byte[] toProto(RootEntity entity, IDatabase db) {
     if (entity == null)
       return null;
     var message = toMessage(entity, db);
@@ -53,13 +53,13 @@ final class ProtoWriter {
       : message.toByteArray();
   }
 
-  public static byte[] toJson(RootEntity entity, IDatabase db) {
+  static byte[] toJson(RootEntity entity, IDatabase db) {
     if (entity == null)
       return null;
-    var message = toMessage(entity, db);
-    if (message == null)
-      return null;
     try {
+      var message = toMessage(entity, db);
+      if (message == null)
+        return null;
       var json = JsonFormat.printer().print(message);
       return json.getBytes(StandardCharsets.UTF_8);
     } catch (Exception e) {
