@@ -1,6 +1,7 @@
 package org.openlca.git;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -30,12 +31,12 @@ public class RepoWriter {
 
   private final Logger log = LoggerFactory.getLogger(getClass());
   private final IDatabase db;
-  private final Repository repo;
+  private final FileRepository repo;
   private final PersonIdent committer;
 
   public RepoWriter(
     IDatabase db,
-    Repository repo,
+    FileRepository repo,
     PersonIdent committer) {
     this.repo = repo;
     this.db = db;
@@ -50,7 +51,7 @@ public class RepoWriter {
 
     start = System.currentTimeMillis();
 
-    var threads = Executors.newFixedThreadPool(4);
+    var threads = Executors.newCachedThreadPool();
     // build the tree
     var tree = new TreeFormatter();
     for (var type : ModelType.values()) {
@@ -120,7 +121,7 @@ public class RepoWriter {
 
       Consumer<Pair<Descriptor, byte[]>> onNext = pair -> {
         try {
-          while (!dataQueue.offer(pair, 60, TimeUnit.SECONDS)) {
+          while (!dataQueue.offer(pair, 5, TimeUnit.SECONDS)) {
             log.warn("data queue is blocked; waiting");
           }
         } catch (InterruptedException e) {
@@ -159,20 +160,30 @@ public class RepoWriter {
         }
       };
 
+      var inserter = repo.getObjectDatabase().newPackInserter();
+      inserter.checkExisting(false);
+
       while (true) {
         try {
           var next = dataQueue.take();
           if (next == dataEnd)
             break;
-          try (var inserter = repo.newObjectInserter()) {
-            var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
-            onNext.accept(Pair.of(next.first, blobID));
-          }
+
+          var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
+          onNext.accept(Pair.of(next.first, blobID));
         } catch (Exception e) {
           log.error("failed to insert blob", e);
           break;
         }
       }
+
+      try {
+        inserter.flush();
+        inserter.close();
+      } catch (IOException e) {
+        log.error("failed to flush objects", e);
+      }
+
       onNext.accept(blobEnd);
     });
 
