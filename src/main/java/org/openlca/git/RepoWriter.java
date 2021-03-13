@@ -3,8 +3,8 @@ package org.openlca.git;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
@@ -21,15 +21,16 @@ import org.openlca.core.model.Version;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.DbTree.Node;
 import org.openlca.util.Pair;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class RepoWriter {
 
+  private final Logger log = LoggerFactory.getLogger(getClass());
   private final IDatabase db;
   private final Repository repo;
   private final PersonIdent committer;
 
-  // private final byte[] FINISH_MARKER = new byte[0];
 
   public RepoWriter(
     IDatabase db,
@@ -85,7 +86,6 @@ public class RepoWriter {
       update.update();
 
     } catch (Exception e) {
-      var log = LoggerFactory.getLogger(getClass());
       log.error("failed to sync tree", e);
     }
   }
@@ -114,6 +114,17 @@ public class RepoWriter {
     // start a thread that loads the data sets and
     // converts them to byte arrays
     new Thread(() -> {
+
+      Consumer<Pair<Descriptor, byte[]>> onNext = pair -> {
+        try {
+          while (!dataQueue.offer(pair, 60, TimeUnit.SECONDS)) {
+            log.warn("data queue is blocked; waiting");
+          }
+        } catch (InterruptedException e) {
+          log.error("interrupted data adding", e);
+        }
+      };
+
       for (var d : node.content) {
         try {
           var entity = db.get(d.type.getModelClass(), d.id);
@@ -121,22 +132,30 @@ public class RepoWriter {
           if (data == null) {
             break;
           }
-          while(!dataQueue.offer(Pair.of(d, data), 60, TimeUnit.SECONDS)) {
-            var log = LoggerFactory.getLogger(getClass());
-            log.warn("data queue is blocked; waiting");
-          }
+          onNext.accept(Pair.of(d, data));
         } catch (Exception e) {
-          var log = LoggerFactory.getLogger(getClass());
           log.error("failed to convert to proto: " + d, e);
           break;
         }
       }
-      dataQueue.add(dataEnd);
+      onNext.accept(dataEnd);
+
     }).start();
 
     // start a thread that takes the byte arrays and writes
     // them to the blob store
     new Thread(() -> {
+
+      Consumer<Pair<Descriptor, ObjectId>> onNext = pair -> {
+        try {
+          while (!blobQueue.offer(pair, 60, TimeUnit.SECONDS)) {
+            log.warn("blob queue is blocked; waiting");
+          }
+        } catch (InterruptedException e) {
+          log.error("interrupted data adding", e);
+        }
+      };
+
       while (true) {
         try {
           var next = dataQueue.take();
@@ -144,15 +163,14 @@ public class RepoWriter {
             break;
           try (var inserter = repo.newObjectInserter()) {
             var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
-            blobQueue.add(Pair.of(next.first, blobID));
+            onNext.accept(Pair.of(next.first, blobID));
           }
         } catch (Exception e) {
-          var log = LoggerFactory.getLogger(getClass());
           log.error("failed to insert blob", e);
           break;
         }
       }
-      blobQueue.add(blobEnd);
+      onNext.accept(blobEnd);
     }).start();
 
     // add the blob IDs to the tree
@@ -165,7 +183,6 @@ public class RepoWriter {
         var name = d.refId + "_" + Version.asString(d.version) + ".json";
         tree.append(name, FileMode.REGULAR_FILE, next.second);
       } catch (Exception e) {
-        var log = LoggerFactory.getLogger(getClass());
         log.error("interruption in writer threads", e);
         break;
       }
@@ -178,7 +195,6 @@ public class RepoWriter {
     try (var inserter = repo.newObjectInserter()) {
       return tree.insertTo(inserter);
     } catch (Exception e) {
-      var log = LoggerFactory.getLogger(getClass());
       log.error("failed to insert tree", e);
       return null;
     }
