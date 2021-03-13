@@ -9,17 +9,18 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import gnu.trove.map.hash.TLongObjectHashMap;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.PersonIdent;
-import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.openlca.core.database.Derby;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
+import org.openlca.core.model.RootEntity;
 import org.openlca.core.model.Version;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.DbTree.Node;
@@ -129,10 +130,20 @@ public class RepoWriter {
         }
       };
 
+      var map = new TLongObjectHashMap<Descriptor>();
+      Class<? extends RootEntity> type = null;
       for (var d : node.content) {
+        map.put(d.id, d);
+        if (type == null) {
+          type = d.type.getModelClass();
+        }
+      }
+      var models = db.getAll(type, map.keySet());
+
+      for (var model : models) {
+        var d = map.get(model.id);
         try {
-          var entity = db.get(d.type.getModelClass(), d.id);
-          var data = ProtoWriter.toJson(entity, db);
+          var data = ProtoWriter.toJson(model, db);
           if (data == null) {
             break;
           }
