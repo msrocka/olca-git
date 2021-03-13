@@ -4,6 +4,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
@@ -17,6 +18,7 @@ import org.openlca.core.database.Derby;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.Version;
+import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.DbTree.Node;
 import org.openlca.util.Pair;
 import org.slf4j.LoggerFactory;
@@ -104,66 +106,71 @@ public class RepoWriter {
       return insertTree(tree);
 
     // try to convert and write the data sets with multiple threads
-    var threads = Executors.newFixedThreadPool(8);
-    var dataQueue = new ArrayBlockingQueue<byte[]>(50);
-    var blobQueue = new ArrayBlockingQueue<Pair<String, ObjectId>>(50);
-    Pair<String, ObjectId> empty = Pair.of(null, null);
+    var dataQueue = new ArrayBlockingQueue<Pair<Descriptor, byte[]>>(50);
+    var blobQueue = new ArrayBlockingQueue<Pair<Descriptor, ObjectId>>(50);
+    Pair<Descriptor, byte[]> dataEnd = Pair.of(null, null);
+    Pair<Descriptor, ObjectId> blobEnd = Pair.of(null, null);
 
-    for (var d : node.content) {
-      if (d.type == null || d.type.getModelClass() == null)
-        continue;
-
-      // load and convert the data set into a byte array and
-      // add it to the queue.
-      threads.submit(() -> {
+    // start a thread that loads the data sets and
+    // converts them to byte arrays
+    new Thread(() -> {
+      for (var d : node.content) {
         try {
           var entity = db.get(d.type.getModelClass(), d.id);
           var data = ProtoWriter.toJson(entity, db);
-          dataQueue.add(data == null ? new byte[0] : data);
+          if (data == null) {
+            break;
+          }
+          while(!dataQueue.offer(Pair.of(d, data), 60, TimeUnit.SECONDS)) {
+            var log = LoggerFactory.getLogger(getClass());
+            log.warn("data queue is blocked; waiting");
+          }
         } catch (Exception e) {
           var log = LoggerFactory.getLogger(getClass());
           log.error("failed to convert to proto: " + d, e);
-          dataQueue.add(new byte[0]);
+          break;
         }
-      });
+      }
+      dataQueue.add(dataEnd);
+    }).start();
 
-      // get a data package and write it to the blob store
-      threads.submit(() -> {
+    // start a thread that takes the byte arrays and writes
+    // them to the blob store
+    new Thread(() -> {
+      while (true) {
         try {
-          var data = dataQueue.take();
-          if (data.length == 0) {
-            blobQueue.add(empty);
-            return;
-          }
+          var next = dataQueue.take();
+          if (next == dataEnd)
+            break;
           try (var inserter = repo.newObjectInserter()) {
-            var blobID = inserter.insert(Constants.OBJ_BLOB, data);
-            var name = d.refId + "_" + Version.asString(d.version) + ".json";
-            blobQueue.add(Pair.of(name, blobID));
+            var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
+            blobQueue.add(Pair.of(next.first, blobID));
           }
         } catch (Exception e) {
           var log = LoggerFactory.getLogger(getClass());
-          log.error("failed to insert blob for " + d, e);
-          blobQueue.add(empty);
+          log.error("failed to insert blob", e);
+          break;
         }
-      });
+      }
+      blobQueue.add(blobEnd);
+    }).start();
 
-      // add blobs to the tree in the main thread
+    // add the blob IDs to the tree
+    while (true) {
       try {
         var next = blobQueue.take();
-        if (next != empty) {
-          tree.append(next.first, FileMode.REGULAR_FILE, next.second);
-        }
+        if (next == blobEnd)
+          break;
+        var d = next.first;
+        var name = d.refId + "_" + Version.asString(d.version) + ".json";
+        tree.append(name, FileMode.REGULAR_FILE, next.second);
       } catch (Exception e) {
         var log = LoggerFactory.getLogger(getClass());
         log.error("interruption in writer threads", e);
         break;
       }
-
     }
 
-    // we do not need to wait for the threads to finish here as
-    // everything should be synchronized via the queues
-    threads.shutdown();
     return insertTree(tree);
   }
 
