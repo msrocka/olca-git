@@ -3,6 +3,8 @@ package org.openlca.git;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -31,7 +33,6 @@ public class RepoWriter {
   private final Repository repo;
   private final PersonIdent committer;
 
-
   public RepoWriter(
     IDatabase db,
     Repository repo,
@@ -49,17 +50,19 @@ public class RepoWriter {
 
     start = System.currentTimeMillis();
 
+    var threads = Executors.newFixedThreadPool(4);
     // build the tree
     var tree = new TreeFormatter();
     for (var type : ModelType.values()) {
       var node = dbTree.getRoot(type);
       if (node == null)
         continue;
-      var id = syncTree(node);
+      var id = syncTree(node, threads);
       if (id != null) {
         tree.append(type.name(), FileMode.TREE, id);
       }
     }
+    threads.shutdown();
     commit(tree);
 
     time = System.currentTimeMillis() - start;
@@ -90,14 +93,14 @@ public class RepoWriter {
     }
   }
 
-  private ObjectId syncTree(Node node) {
+  private ObjectId syncTree(Node node, ExecutorService threads) {
     if (node.content.isEmpty() && node.childs.isEmpty())
       return null;
 
     // first sync the child trees
     var tree = new TreeFormatter();
     for (var child : node.childs) {
-      var childID = syncTree(child);
+      var childID = syncTree(child, threads);
       if (childID != null) {
         tree.append(child.name, FileMode.TREE, childID);
       }
@@ -113,7 +116,7 @@ public class RepoWriter {
 
     // start a thread that loads the data sets and
     // converts them to byte arrays
-    new Thread(() -> {
+    threads.submit(() -> {
 
       Consumer<Pair<Descriptor, byte[]>> onNext = pair -> {
         try {
@@ -140,11 +143,11 @@ public class RepoWriter {
       }
       onNext.accept(dataEnd);
 
-    }).start();
+    });
 
     // start a thread that takes the byte arrays and writes
     // them to the blob store
-    new Thread(() -> {
+    threads.submit(() -> {
 
       Consumer<Pair<Descriptor, ObjectId>> onNext = pair -> {
         try {
@@ -171,7 +174,7 @@ public class RepoWriter {
         }
       }
       onNext.accept(blobEnd);
-    }).start();
+    });
 
     // add the blob IDs to the tree
     while (true) {
