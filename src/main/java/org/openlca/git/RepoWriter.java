@@ -129,14 +129,17 @@ public class RepoWriter {
 
       // get a data package and write it to the blob store
       threads.submit(() -> {
-        var data = dataQueue.poll();
-        if (data == null || data.length == 0) {
-          blobQueue.add(empty);
-        }
-        try (var inserter = repo.newObjectInserter()) {
-          var blobID = inserter.insert(Constants.OBJ_BLOB, data);
-          var name = d.refId + "_" + Version.asString(d.version) + ".json";
-          blobQueue.add(Pair.of(name, blobID));
+        try {
+          var data = dataQueue.take();
+          if (data.length == 0) {
+            blobQueue.add(empty);
+            return;
+          }
+          try (var inserter = repo.newObjectInserter()) {
+            var blobID = inserter.insert(Constants.OBJ_BLOB, data);
+            var name = d.refId + "_" + Version.asString(d.version) + ".json";
+            blobQueue.add(Pair.of(name, blobID));
+          }
         } catch (Exception e) {
           var log = LoggerFactory.getLogger(getClass());
           log.error("failed to insert blob for " + d, e);
@@ -145,10 +148,17 @@ public class RepoWriter {
       });
 
       // add blobs to the tree in the main thread
-      var next = blobQueue.poll();
-      if (next != null && next != empty) {
-        tree.append(next.first, FileMode.REGULAR_FILE, next.second);
+      try {
+        var next = blobQueue.take();
+        if (next != empty) {
+          tree.append(next.first, FileMode.REGULAR_FILE, next.second);
+        }
+      } catch (Exception e) {
+        var log = LoggerFactory.getLogger(getClass());
+        log.error("interruption in writer threads", e);
+        break;
       }
+
     }
 
     // we do not need to wait for the threads to finish here as
