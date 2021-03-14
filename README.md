@@ -37,6 +37,10 @@ __Status/Findings:__
   massively reduced when switching to eager loading but then more data than
   necessary are loaded from the database which is even slower. There are
   maybe more options for improving the performance here.
+* There is not much difference regarding the performance when writing the data
+  in JSON or Protocol Buffers format (using olca-proto); but it has probably
+  an influence when reading the data (this needs more tests)
+
 
 Tests with writing a reference database with more than 60000 flows to a
 repository:
