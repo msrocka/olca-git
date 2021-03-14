@@ -1,14 +1,11 @@
 package org.openlca.git;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
@@ -17,13 +14,10 @@ import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.TreeFormatter;
-import org.openlca.core.database.Derby;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.Version;
-import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.DbTree.Node;
-import org.openlca.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,7 +105,7 @@ public class RepoWriter {
 
     // try to convert and write the data sets with multiple threads
     // and synchronize them with a blocking queue
-    var queue = new ArrayBlockingQueue<Pair<Descriptor, byte[]>>(50);
+    var config = Converter.newJsonConfig(db);
 
     // start a single writer thread that waits for the converted data sets
     var writer = threads.submit(() -> {
@@ -120,8 +114,8 @@ public class RepoWriter {
       // we must get a result (which can be empty) for each data set
       for (int i = 0; i < node.content.size(); i++) {
         try {
-          var next = queue.take();
-          if (next == Converter.EMPTY)
+          var next = config.queue.take();
+          if (next == config.EMPTY)
             continue;
           var d = next.first;
           var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
@@ -155,7 +149,7 @@ public class RepoWriter {
           break;
         var descriptor = node.content.get(offset);
         var future = threads.submit(
-          new Converter(queue, descriptor, db));
+          new Converter(config, descriptor));
         futures.add(future);
         offset++;
       }
@@ -190,65 +184,6 @@ public class RepoWriter {
     } catch (Exception e) {
       log.error("failed to insert tree", e);
       return null;
-    }
-  }
-
-  private static class Converter implements Runnable {
-
-    static final Pair<Descriptor, byte[]> EMPTY = Pair.of(null, null);
-
-    private final ArrayBlockingQueue<Pair<Descriptor, byte[]>> queue;
-    private final Descriptor descriptor;
-    private final IDatabase db;
-
-    Converter(ArrayBlockingQueue<Pair<Descriptor, byte[]>> queue,
-              Descriptor descriptor,
-              IDatabase db) {
-      this.queue = queue;
-      this.descriptor = descriptor;
-      this.db = db;
-    }
-
-    @Override
-    public void run() {
-      try {
-        var model = db.get(descriptor.type.getModelClass(), descriptor.id);
-        var data = ProtoWriter.toJson(model, db);
-        addNext(data == null ? EMPTY : Pair.of(descriptor, data));
-      } catch (Exception e) {
-        var log = LoggerFactory.getLogger(getClass());
-        log.error("failed to convert data set " + descriptor, e);
-        addNext(EMPTY);
-      }
-    }
-
-    private void addNext(Pair<Descriptor, byte[]> pair) {
-      try {
-        while (!queue.offer(pair, 5, TimeUnit.SECONDS)) {
-          var log = LoggerFactory.getLogger(getClass());
-          log.warn("data queue blocked; waiting");
-        }
-      } catch (InterruptedException e) {
-        var log = LoggerFactory.getLogger(getClass());
-        log.error("failed to add element to data queue", e);
-      }
-    }
-
-  }
-
-  public static void main(String[] args) {
-
-    var committer = new PersonIdent("msrocka", "test@some.mail.com");
-    var repoDir = new File("target/testrepo/.git");
-
-    try (var db = Derby.fromDataDir("refdb");
-         var repo = new FileRepository(repoDir)) {
-      if (!repoDir.exists()) {
-        repo.create(true); // bare repo
-      }
-      new RepoWriter(db, repo, committer).sync();
-    } catch (Exception e) {
-      e.printStackTrace();
     }
   }
 

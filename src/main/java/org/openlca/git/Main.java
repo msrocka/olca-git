@@ -14,53 +14,27 @@ import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.persistence.jpa.jpql.EclipseLinkVersion;
 import org.eclipse.persistence.jpa.jpql.JPAVersion;
+import org.openlca.core.database.Derby;
 
 public class Main {
 
   public static void main(String[] args) {
     try {
 
-      // printContent(new File(".git"));
-      var author = new PersonIdent("msrocka", "test@some.mail.com");
+      var committer = new PersonIdent("msrocka", "test@some.mail.com");
+      var repoDir = new File("target/testrepo/.git");
 
-      var gitDir = new File("./target/testrepo");
-      var repo = new FileRepository(gitDir);
-      if (!gitDir.exists()) {
-        repo.create(true); // create a bare repo
+      try (var db = Derby.fromDataDir("refdb");
+           var repo = new FileRepository(repoDir)) {
+        if (!repoDir.exists()) {
+          repo.create(true); // bare repo
+        }
+        new RepoWriter(db, repo, committer).sync();
+      } catch (Exception e) {
+        e.printStackTrace();
       }
 
-      try (var inserter = repo.newObjectInserter()) {
-        var blobID = inserter.insert(Constants.OBJ_BLOB, "test".getBytes());
-        var tree = new TreeFormatter();
-        tree.append("test.txt", FileMode.REGULAR_FILE, blobID);
-        var treeID = tree.insertTo(inserter);
-        var commit = new CommitBuilder();
-        commit.setAuthor(author);
-        commit.setCommitter(author);
-        commit.setMessage("first commit");
-        commit.setEncoding(StandardCharsets.UTF_8);
-        commit.setTreeId(treeID);
-        var commitID = inserter.insert(commit);
-
-        var ref = repo.findRef("HEAD");
-        var update = repo.updateRef(ref.getName());
-        update.setNewObjectId(commitID);
-        update.update();
-      }
-      repo.close();
-
-      printContent(gitDir);
-      /*
-       * var gitDir = new File("./target/.git"); Repository repo; if
-       * (gitDir.exists()) { repo = new FileRepository(gitDir); } else { repo =
-       * FileRepositoryBuilder .create(gitDir); repo.create(); }
-       *
-       * var id = repo.newObjectInserter() .insert(Constants.OBJ_BLOB,
-       * "hello".getBytes());
-       *
-       * System.out.println(id.getName());
-       *
-       */
+      // printContent(repoDir);
     } catch (Exception e) {
       e.printStackTrace();
     }
