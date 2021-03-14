@@ -29,7 +29,9 @@ public class Main {
         if (!repoDir.exists()) {
           repo.create(true); // bare repo
         }
-        new RepoWriter(db, repo, committer).sync();
+        new RepoWriter(db, repo, committer)
+          .writeProtos(true)
+          .sync();
       } catch (Exception e) {
         e.printStackTrace();
       }

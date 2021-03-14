@@ -28,6 +28,8 @@ public class RepoWriter {
   private final FileRepository repo;
   private final PersonIdent committer;
 
+  private boolean writeProtos;
+
   public RepoWriter(
     IDatabase db,
     FileRepository repo,
@@ -35,6 +37,11 @@ public class RepoWriter {
     this.repo = repo;
     this.db = db;
     this.committer = committer;
+  }
+
+  public RepoWriter writeProtos(boolean b) {
+    this.writeProtos = b;
+    return this;
   }
 
   public void sync() {
@@ -105,7 +112,9 @@ public class RepoWriter {
 
     // try to convert and write the data sets with multiple threads
     // and synchronize them with a blocking queue
-    var config = Converter.newJsonConfig(db);
+    var config = writeProtos
+        ? Converter.newProtoConfig(db)
+        : Converter.newJsonConfig(db);
 
     // start a single writer thread that waits for the converted data sets
     var writer = threads.submit(() -> {
@@ -119,7 +128,8 @@ public class RepoWriter {
             continue;
           var d = next.first;
           var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
-          var name = d.refId + "_" + Version.asString(d.version) + ".json";
+          var ext = writeProtos ? ".proto" : ".json";
+          var name = d.refId + "_" + Version.asString(d.version) + ext;
           tree.append(name, FileMode.REGULAR_FILE, blobID);
         } catch (Exception e) {
           log.error("failed to write data set", e);
