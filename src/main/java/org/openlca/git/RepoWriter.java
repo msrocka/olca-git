@@ -3,13 +3,13 @@ package org.openlca.git;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
-import gnu.trove.map.hash.TLongObjectHashMap;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
@@ -20,7 +20,6 @@ import org.eclipse.jgit.lib.TreeFormatter;
 import org.openlca.core.database.Derby;
 import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
-import org.openlca.core.model.RootEntity;
 import org.openlca.core.model.Version;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.DbTree.Node;
@@ -111,83 +110,29 @@ public class RepoWriter {
       return insertTree(tree);
 
     // try to convert and write the data sets with multiple threads
-    var dataQueue = new ArrayBlockingQueue<Pair<Descriptor, byte[]>>(50);
-    var blobQueue = new ArrayBlockingQueue<Pair<Descriptor, ObjectId>>(50);
-    Pair<Descriptor, byte[]> dataEnd = Pair.of(null, null);
-    Pair<Descriptor, ObjectId> blobEnd = Pair.of(null, null);
+    // and synchronize them with a blocking queue
+    var queue = new ArrayBlockingQueue<Pair<Descriptor, byte[]>>(50);
 
-    // start a thread that loads the data sets and
-    // converts them to byte arrays
-    threads.submit(() -> {
-
-      Consumer<Pair<Descriptor, byte[]>> onNext = pair -> {
-        try {
-          while (!dataQueue.offer(pair, 5, TimeUnit.SECONDS)) {
-            log.warn("data queue is blocked; waiting");
-          }
-        } catch (InterruptedException e) {
-          log.error("interrupted data adding", e);
-        }
-      };
-
-      var map = new TLongObjectHashMap<Descriptor>();
-      Class<? extends RootEntity> type = null;
-      for (var d : node.content) {
-        map.put(d.id, d);
-        if (type == null) {
-          type = d.type.getModelClass();
-        }
-      }
-      var models = db.getAll(type, map.keySet());
-
-      for (var model : models) {
-        var d = map.get(model.id);
-        try {
-          var data = ProtoWriter.toJson(model, db);
-          if (data == null) {
-            break;
-          }
-          onNext.accept(Pair.of(d, data));
-        } catch (Exception e) {
-          log.error("failed to convert to proto: " + d, e);
-          break;
-        }
-      }
-      onNext.accept(dataEnd);
-
-    });
-
-    // start a thread that takes the byte arrays and writes
-    // them to the blob store
-    threads.submit(() -> {
-
-      Consumer<Pair<Descriptor, ObjectId>> onNext = pair -> {
-        try {
-          while (!blobQueue.offer(pair, 60, TimeUnit.SECONDS)) {
-            log.warn("blob queue is blocked; waiting");
-          }
-        } catch (InterruptedException e) {
-          log.error("interrupted data adding", e);
-        }
-      };
-
+    // start a single writer thread that waits for the converted data sets
+    var writer = threads.submit(() -> {
       var inserter = repo.getObjectDatabase().newPackInserter();
       inserter.checkExisting(false);
-
-      while (true) {
+      // we must get a result (which can be empty) for each data set
+      for (int i = 0; i < node.content.size(); i++) {
         try {
-          var next = dataQueue.take();
-          if (next == dataEnd)
-            break;
-
+          var next = queue.take();
+          if (next == Converter.EMPTY)
+            continue;
+          var d = next.first;
           var blobID = inserter.insert(Constants.OBJ_BLOB, next.second);
-          onNext.accept(Pair.of(next.first, blobID));
+          var name = d.refId + "_" + Version.asString(d.version) + ".json";
+          tree.append(name, FileMode.REGULAR_FILE, blobID);
         } catch (Exception e) {
-          log.error("failed to insert blob", e);
-          break;
+          log.error("failed to write data set", e);
         }
       }
 
+      // close the inserter
       try {
         inserter.flush();
         inserter.close();
@@ -195,22 +140,45 @@ public class RepoWriter {
         log.error("failed to flush objects", e);
       }
 
-      onNext.accept(blobEnd);
     });
 
-    // add the blob IDs to the tree
-    while (true) {
-      try {
-        var next = blobQueue.take();
-        if (next == blobEnd)
+    // start the converters in blocks of threads
+    var workerCount = 8;
+    var futures = new ArrayList<Future<?>>(workerCount);
+    int total = node.content.size();
+    int offset = 0;
+    while (offset < total) {
+
+      // start a new block of converters
+      for (int i = 0; i < workerCount; i++) {
+        if (offset >= total)
           break;
-        var d = next.first;
-        var name = d.refId + "_" + Version.asString(d.version) + ".json";
-        tree.append(name, FileMode.REGULAR_FILE, next.second);
-      } catch (Exception e) {
-        log.error("interruption in writer threads", e);
-        break;
+        var descriptor = node.content.get(offset);
+        var future = threads.submit(
+          new Converter(queue, descriptor, db));
+        futures.add(future);
+        offset++;
       }
+      if (futures.isEmpty())
+        break;
+
+      // wait for the converters to finish
+      try {
+        for(var future : futures) {
+          future.get();
+        }
+      } catch (Exception e) {
+        log.error("interrupted conversion", e);
+      } finally {
+        futures.clear();
+      }
+    }
+
+    // wait for the writer to finish
+    try {
+      writer.get();
+    } catch (Exception e) {
+      log.error("failed to finish the writer thread", e);
     }
 
     return insertTree(tree);
@@ -223,6 +191,49 @@ public class RepoWriter {
       log.error("failed to insert tree", e);
       return null;
     }
+  }
+
+  private static class Converter implements Runnable {
+
+    static final Pair<Descriptor, byte[]> EMPTY = Pair.of(null, null);
+
+    private final ArrayBlockingQueue<Pair<Descriptor, byte[]>> queue;
+    private final Descriptor descriptor;
+    private final IDatabase db;
+
+    Converter(ArrayBlockingQueue<Pair<Descriptor, byte[]>> queue,
+              Descriptor descriptor,
+              IDatabase db) {
+      this.queue = queue;
+      this.descriptor = descriptor;
+      this.db = db;
+    }
+
+    @Override
+    public void run() {
+      try {
+        var model = db.get(descriptor.type.getModelClass(), descriptor.id);
+        var data = ProtoWriter.toJson(model, db);
+        addNext(data == null ? EMPTY : Pair.of(descriptor, data));
+      } catch (Exception e) {
+        var log = LoggerFactory.getLogger(getClass());
+        log.error("failed to convert data set " + descriptor, e);
+        addNext(EMPTY);
+      }
+    }
+
+    private void addNext(Pair<Descriptor, byte[]> pair) {
+      try {
+        while (!queue.offer(pair, 5, TimeUnit.SECONDS)) {
+          var log = LoggerFactory.getLogger(getClass());
+          log.warn("data queue blocked; waiting");
+        }
+      } catch (InterruptedException e) {
+        var log = LoggerFactory.getLogger(getClass());
+        log.error("failed to add element to data queue", e);
+      }
+    }
+
   }
 
   public static void main(String[] args) {
