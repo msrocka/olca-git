@@ -10,6 +10,8 @@ public class Config {
 	public final FileRepository repo;
 	public final PersonIdent committer;
 	public final boolean asProto;
+	public boolean checkExisting = true;
+	public int converterThreads = 8;
 
 	private Config(IDatabase database, FileRepository repo, PersonIdent committer, boolean asProto) {
 		this.database = database;

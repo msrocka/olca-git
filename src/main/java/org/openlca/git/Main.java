@@ -28,6 +28,7 @@ public class Main {
 				var repo = new FileRepository(repoDir)) {
 			repo.create(true);
 			var config = Config.newProtoConfig(database, repo, committer);
+			config.checkExisting = false;
 			var writer = new DbWriter(config);
 			writer.refData(true);
 			writer.timer.print("tree");

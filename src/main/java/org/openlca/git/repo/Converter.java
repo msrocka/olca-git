@@ -31,7 +31,7 @@ class Converter {
 		var total = descriptors.size();
 		var offset = 0;
 		while (offset < total) {
-			for (var i = 0; i < workerCount; i++) {
+			for (var i = 0; i < config.converterThreads; i++) {
 				if (offset >= total)
 					break;
 				var descriptor = descriptors.get(offset);

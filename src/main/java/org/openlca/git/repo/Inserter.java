@@ -31,7 +31,7 @@ class Inserter {
 	public Future<?> insert(List<Descriptor> descriptors, TreeFormatter tree) {
 		return threads.submit(() -> {
 			var inserter = config.repo.getObjectDatabase().newPackInserter();
-			inserter.checkExisting(false);
+			inserter.checkExisting(config.checkExisting);
 			for (var descriptor : descriptors) {
 				write(descriptor, tree, inserter);
 			}
