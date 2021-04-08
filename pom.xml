@@ -44,6 +44,12 @@
     </dependency>
 
     <dependency>
+      <groupId>com.github.sarveswaran-m</groupId>
+      <artifactId>util.concurrent.blockingMap</artifactId>
+      <version>0.91</version>
+    </dependency>
+
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.13.1</version>
