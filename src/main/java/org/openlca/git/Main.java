@@ -27,9 +27,9 @@ public class Main {
 				var repo = new FileRepository(repoDir)) {
 			repo.create(true);
 			var config = Config.newProtoConfig(database, repo, committer);
-			config.checkExisting = false;
+			config.checkExisting = true;
 			var writer = new DbWriter(config);
-			writer.refData(true);
+			writer.refData(false);
 			writer.timer.print("tree");
 			writer.timer.print("writer");
 		}
@@ -73,14 +73,16 @@ public class Main {
 					dTree.addBranch(type);
 				}
 			});
-			timer.time("writer", () -> writer.commit(dTree, "Added data"));
+			timer.time("writer", () -> System.out.println(
+					"Written commit " + writer.commit(dTree, "Added data")));
 		}
 
 		private void refDataSeparateCommits() {
 			for (ModelType type : REF_DATA_TYPES) {
 				var dTree = new Tree(database);
 				timer.time("tree", () -> dTree.addBranch(type));
-				timer.time("writer", () -> writer.commit(dTree, "Added data for type " + type.name()));
+				timer.time("writer", () -> System.out.println(
+						"Written commit " + writer.commit(dTree, "Added data for type " + type.name())));
 			}
 		}
 

@@ -28,13 +28,13 @@ public class RepoWriter {
 		this.config = config;
 	}
 
-	public void commit(Tree dTree, String message) {
+	public String commit(Tree dTree, String message) {
 		if (dTree.isEmpty())
-			return;
+			return null;
 		var tree = new TreeFormatter();
 		appendChildren(tree, dTree.getNodes());
 		var commitId = commit(tree, message);
-		updateHeadWith(commitId);
+		return commitId.name();
 	}
 
 	private ObjectId createTree(Node node) {
@@ -72,24 +72,27 @@ public class RepoWriter {
 	}
 
 	private ObjectId commit(TreeFormatter tree, String message) {
-		var treeId = insert(i -> i.insert(tree));
-		var commit = new CommitBuilder();
-		commit.setAuthor(config.committer);
-		commit.setCommitter(config.committer);
-		commit.setMessage(message);
-		commit.setEncoding(StandardCharsets.UTF_8);
-		commit.setTreeId(treeId);
-		return insert(i -> i.insert(commit));
-	}
-
-	private void updateHeadWith(ObjectId commitId) {
 		try {
-			var ref = config.repo.findRef("HEAD");
-			var update = config.repo.updateRef(ref.getName());
+			var treeId = insert(i -> i.insert(tree));
+			var commit = new CommitBuilder();
+			commit.setAuthor(config.committer);
+			commit.setCommitter(config.committer);
+			commit.setMessage(message);
+			commit.setEncoding(StandardCharsets.UTF_8);
+			commit.setTreeId(treeId);
+			var head = config.repo.findRef("HEAD");
+			var previousCommitId = head.getObjectId();
+			if (previousCommitId != null) {
+				commit.addParentId(previousCommitId);
+			}
+			var commitId = insert(i -> i.insert(commit));
+			var update = config.repo.updateRef(head.getName());
 			update.setNewObjectId(commitId);
 			update.update();
+			return commitId;
 		} catch (IOException e) {
 			log.error("failed to update head", e);
+			return null;
 		}
 	}
 
