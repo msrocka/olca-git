@@ -12,7 +12,6 @@ import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
 import org.openlca.git.descriptor.Tree;
 import org.openlca.git.repo.RepoWriter;
-import org.openlca.util.Dirs;
 
 public class Main {
 
@@ -22,7 +21,7 @@ public class Main {
 
 	public static void main(String[] args) throws IOException {
 		if (repoDir.exists()) {
-			Dirs.delete(repoDir);
+			delete(repoDir);
 		}
 		try (var database = Derby.fromDataDir(db);
 				var repo = new FileRepository(repoDir)) {
@@ -36,10 +35,19 @@ public class Main {
 		}
 	}
 
+	private static void delete(File file) {
+		if (file.isDirectory()) {
+			for (File child : file.listFiles()) {
+				delete(child);
+			}
+		}
+		file.delete();
+	}
+
 	private static class DbWriter {
 
 		private static final ModelType[] REF_DATA_TYPES = { ModelType.UNIT_GROUP, ModelType.FLOW_PROPERTY,
-				ModelType.CURRENCY, ModelType.LOCATION, ModelType.DQ_SYSTEM, ModelType.FLOW };
+				ModelType.CURRENCY, ModelType.LOCATION, ModelType.DQ_SYSTEM };
 		private final IDatabase database;
 		private final RepoWriter writer;
 		private final Timer timer;
