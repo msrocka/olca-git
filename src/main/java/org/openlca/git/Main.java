@@ -17,7 +17,7 @@ public class Main {
 
 	private static final String db = "ref_data";
 	private static final PersonIdent committer = new PersonIdent("greve", "greve@greendelta.com");
-	private static final File repoDir = new File("C:/Users/Sebastian/test/olca-git/" + db);
+	private static final File repoDir = new File("C:/Users/Sebastian/test/olca-git/" + db + "3");
 
 	public static void main(String[] args) throws IOException {
 		if (repoDir.exists()) {
@@ -47,7 +47,7 @@ public class Main {
 	private static class DbWriter {
 
 		private static final ModelType[] REF_DATA_TYPES = { ModelType.UNIT_GROUP, ModelType.FLOW_PROPERTY,
-				ModelType.CURRENCY, ModelType.LOCATION, ModelType.DQ_SYSTEM };
+				ModelType.CURRENCY, ModelType.LOCATION, ModelType.DQ_SYSTEM, ModelType.FLOW };
 		private final IDatabase database;
 		private final RepoWriter writer;
 		private final Timer timer;
@@ -73,16 +73,16 @@ public class Main {
 					dTree.addBranch(type);
 				}
 			});
-			timer.time("writer", () -> System.out.println(
-					"Written commit " + writer.commit(dTree, "Added data")));
+			timer.time("writer",
+					() -> System.out.println(writer.commit(dTree, "Added data")));
 		}
 
 		private void refDataSeparateCommits() {
 			for (ModelType type : REF_DATA_TYPES) {
 				var dTree = new Tree(database);
 				timer.time("tree", () -> dTree.addBranch(type));
-				timer.time("writer", () -> System.out.println(
-						"Written commit " + writer.commit(dTree, "Added data for type " + type.name())));
+				timer.time("writer",
+						() -> System.out.println(writer.commit(dTree, "Added data for type " + type.name())));
 			}
 		}
 

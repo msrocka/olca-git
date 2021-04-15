@@ -21,7 +21,6 @@ class Expander {
 		var root = new Node(type.name(), index.get(0));
 		var rootCategories = new CategoryDao(database).getRootCategories(type);
 		expand(root, rootCategories);
-		root.sort();
 		return root;
 	}
 

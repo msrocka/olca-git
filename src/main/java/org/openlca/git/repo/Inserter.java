@@ -9,8 +9,8 @@ import org.eclipse.jgit.internal.storage.file.PackInserter;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.TreeFormatter;
-import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.Config;
+import org.openlca.git.repo.TreeEntries.TreeEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.thavam.util.concurrent.blockingMap.BlockingMap;
@@ -28,12 +28,12 @@ class Inserter {
 		this.threads = threads;
 	}
 
-	public Future<?> insert(List<Descriptor> descriptors, TreeFormatter tree) {
+	public Future<?> insert(List<TreeEntry> entries, TreeFormatter tree) {
 		return threads.submit(() -> {
 			var inserter = config.repo.getObjectDatabase().newPackInserter();
 			inserter.checkExisting(config.checkExisting);
-			for (var descriptor : descriptors) {
-				write(descriptor, tree, inserter);
+			for (var entry : entries) {
+				write(entry, tree, inserter);
 			}
 			try {
 				inserter.flush();
@@ -44,15 +44,18 @@ class Inserter {
 		});
 	}
 
-	private void write(Descriptor descriptor, TreeFormatter tree, PackInserter inserter) {
+	private void write(TreeEntry entry, TreeFormatter tree, PackInserter inserter) {
+		if (entry.fileMode != FileMode.REGULAR_FILE)
+			return;
 		try {
-			var data = queue.take(descriptor.refId);
-			if (data == null)
-				return;
-			var blobId = inserter.insert(Constants.OBJ_BLOB, data);
-			var extension = config.asProto ? ".proto" : ".json";
-			var name = descriptor.refId + extension;
-			tree.append(name, FileMode.REGULAR_FILE, blobId);
+			var blobId = entry.objectId;
+			if (blobId == null) {
+				var data = queue.take(entry.name);
+				if (data == null)
+					return;
+				blobId = inserter.insert(Constants.OBJ_BLOB, data);
+			}
+			tree.append(entry.name, FileMode.REGULAR_FILE, blobId);
 		} catch (Exception e) {
 			log.error("failed to write data set", e);
 		}

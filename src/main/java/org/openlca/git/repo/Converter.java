@@ -6,8 +6,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.openlca.core.model.descriptors.Descriptor;
+import org.eclipse.jgit.lib.FileMode;
 import org.openlca.git.Config;
+import org.openlca.git.repo.TreeEntries.TreeEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.thavam.util.concurrent.blockingMap.BlockingMap;
@@ -26,15 +27,15 @@ class Converter {
 		this.threads = threads;
 	}
 
-	void convert(List<Descriptor> descriptors) {
+	void convert(List<TreeEntry> entries) {
 		var futures = new ArrayList<Future<?>>(workerCount);
-		var total = descriptors.size();
+		var total = entries.size();
 		var offset = 0;
 		while (offset < total) {
 			for (var i = 0; i < config.converterThreads; i++) {
 				if (offset >= total)
 					break;
-				var descriptor = descriptors.get(offset);
+				var descriptor = entries.get(offset);
 				var future = threads.submit(() -> convert(descriptor));
 				futures.add(future);
 				offset++;
@@ -45,14 +46,17 @@ class Converter {
 		}
 	}
 
-	private void convert(Descriptor descriptor) {
+	private void convert(TreeEntry entry) {
+		if (entry.fileMode != FileMode.REGULAR_FILE)
+			return;
+		var descriptor = entry.getDescriptor();
 		try {
 			var model = config.database.get(descriptor.type.getModelClass(), descriptor.id);
 			var data = ProtoWriter.convert(model, config);
-			offer(descriptor.refId, data);
+			offer(entry.name, data);
 		} catch (Exception e) {
-			log.error("failed to convert data set " + descriptor, e);
-			offer(descriptor.refId, null);
+			log.error("failed to convert data set " + entry, e);
+			offer(entry.name, null);
 		}
 	}
 
