@@ -1,4 +1,4 @@
-package org.openlca.git.repo;
+package org.openlca.git.commit;
 
 import java.nio.charset.StandardCharsets;
 
