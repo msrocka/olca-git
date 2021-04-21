@@ -48,6 +48,9 @@ public class Main {
 			}
 			repo.create(true);
 			writer.refData(false);
+			
+			writer.update();
+			writer.delete();
 		}
 	}
 

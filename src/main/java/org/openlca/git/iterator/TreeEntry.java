@@ -35,18 +35,13 @@ class TreeEntry implements Comparable<TreeEntry> {
 
 	@Override
 	public int compareTo(TreeEntry e) {
-		// TODO check if sorting is really correct for all cases, order
-		// should be <ul>
-		// <li>a.c</li>
-		// <li>a/c</li>
-		// <li>a0c</li>
-		// </ul>
-		// category could be named the same as refId of a child
-		return (getType() + name).compareTo(e.getType() + e.name);
+		return getName().compareTo(e.getName());
 	}
 
-	private String getType() {
-		return fileMode == FileMode.TREE ? "a" : "b";
+	private String getName() {
+		if (fileMode == FileMode.TREE)
+			return name + "/";
+		return name;
 	}
 
 	@Override
