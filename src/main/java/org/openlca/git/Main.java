@@ -15,7 +15,7 @@ import org.openlca.core.database.LocationDao;
 import org.openlca.core.model.Location;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.descriptors.Descriptor;
-import org.openlca.git.commit.Committer;
+import org.openlca.git.commit.CommitWriter;
 import org.openlca.git.util.Diffs;
 
 import com.google.common.io.Files;
@@ -48,7 +48,7 @@ public class Main {
 			}
 			repo.create(true);
 			writer.refData(false);
-			
+
 			writer.update();
 			writer.delete();
 		}
@@ -84,11 +84,11 @@ public class Main {
 				ModelType.DQ_SYSTEM
 		};
 		private final Config config;
-		private final Committer writer;
+		private final CommitWriter writer;
 
 		private DbWriter(Config config) {
 			this.config = config;
-			this.writer = new Committer(config);
+			this.writer = new CommitWriter(config);
 		}
 
 		private void refData(boolean singleCommit) throws IOException {
@@ -101,7 +101,7 @@ public class Main {
 
 		private void refDataSingleCommit() throws IOException {
 			var diffs = Diffs.workspace(config);
-			System.out.println(writer.commit(diffs, "Added data"));
+			System.out.println(writer.commit("Added data", diffs));
 		}
 
 		private void refDataSeparateCommits() throws IOException {
@@ -110,7 +110,7 @@ public class Main {
 				var filtered = diffs.stream()
 						.filter(d -> d.getNewPath().startsWith(type.name() + "/"))
 						.collect(Collectors.toList());
-				System.out.println(writer.commit(filtered, "Added data for type " + type.name()));
+				System.out.println(writer.commit("Added data for type " + type.name(), filtered));
 			}
 		}
 
@@ -133,8 +133,8 @@ public class Main {
 			config.store.save();
 
 			var diffs = Diffs.workspace(config);
-			var writer = new Committer(config);
-			System.out.println(writer.commit(diffs, "Updated data"));
+			var writer = new CommitWriter(config);
+			System.out.println(writer.commit("Updated data", diffs));
 		}
 
 		private void delete() throws IOException {
@@ -156,8 +156,8 @@ public class Main {
 			}
 			config.store.save();
 			var diffs = Diffs.workspace(config);
-			var writer = new Committer(config);
-			System.out.println(writer.commit(diffs, "Deleted data"));
+			var writer = new CommitWriter(config);
+			System.out.println(writer.commit("Deleted data", diffs));
 		}
 
 	}

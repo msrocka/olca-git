@@ -29,18 +29,18 @@ import org.slf4j.LoggerFactory;
 import org.thavam.util.concurrent.blockingMap.BlockingHashMap;
 import org.thavam.util.concurrent.blockingMap.BlockingMap;
 
-public class Committer {
+public class CommitWriter {
 
-	private static final Logger log = LoggerFactory.getLogger(Committer.class);
+	private static final Logger log = LoggerFactory.getLogger(CommitWriter.class);
 	private final Config config;
 	private BlockingMap<String, byte[]> queue;
 	private PackInserter inserter;
 
-	public Committer(Config config) {
+	public CommitWriter(Config config) {
 		this.config = config;
 	}
 
-	public String commit(List<DiffEntry> diffs, String message) throws IOException {
+	public String commit(String message, List<DiffEntry> diffs) throws IOException {
 		if (diffs.isEmpty())
 			return null;
 		var threads = Executors.newCachedThreadPool();
@@ -53,7 +53,6 @@ public class Committer {
 					.collect(Collectors.toList()));
 			var previousCommitTreeId = getPreviousCommitTreeId();
 			var treeId = syncTree("", previousCommitTreeId, diffs);
-			// TODO all files deleted, treeId == null -> error?
 			config.store.putRoot(treeId);
 			config.store.save();
 			var commitId = commit(treeId, message);
