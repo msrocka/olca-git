@@ -16,7 +16,7 @@ class TreeEntry implements Comparable<TreeEntry> {
 	}
 
 	TreeEntry(Category category) {
-		this(category.name, FileMode.TREE, category);
+		this(GitUtil.encode(category.name), FileMode.TREE, category);
 	}
 
 	TreeEntry(CategorizedDescriptor descriptor, boolean asProto) {

@@ -66,8 +66,8 @@ public class DatabaseIterator extends EntryIterator {
 
 	private static String toPath(Category category) {
 		if (category.category == null)
-			return category.modelType.name() + "/" + category.name;
-		return toPath(category.category) + "/" + category.name;
+			return category.modelType.name() + "/" + GitUtil.encode(category.name);
+		return toPath(category.category) + "/" + GitUtil.encode(category.name);
 	}
 
 	private DatabaseIterator(DatabaseIterator parent, Config config, Category category) {
