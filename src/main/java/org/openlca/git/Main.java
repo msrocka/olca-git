@@ -17,12 +17,13 @@ import org.openlca.core.model.ModelType;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.commit.CommitWriter;
 import org.openlca.git.util.Diffs;
+import org.openlca.git.util.GitUtil;
 
 import com.google.common.io.Files;
 
 public class Main {
 
-	private static final String db = "ref_data";
+	private static final String db = "ecoinvent_37_apos_lci_20201005";
 	private static final PersonIdent committer = new PersonIdent("greve", "greve@greendelta.com");
 	private static final File repoDir = new File("C:/Users/Sebastian/test/olca-git/" + db);
 	private static final File tmp = new File("C:/Users/Sebastian/test/tmp");
@@ -36,21 +37,22 @@ public class Main {
 		try (var database = new Derby(tmp);
 				var repo = new FileRepository(repoDir)) {
 			var config = Config.newJsonConfig(database, repo, committer);
-			config.checkExisting = true;
+			config.checkExisting = false;
 			var writer = new DbWriter(config);
 
 			if (repoDir.exists()) {
 				delete(repoDir);
 			}
-			var olcaRepoDir = new File(database.getFileStorageLocation(), repoDir.getName());
+			var olcaRepoDir = new File(database.getFileStorageLocation(),
+					repoDir.getName());
 			if (olcaRepoDir.exists()) {
 				delete(olcaRepoDir);
 			}
 			repo.create(true);
 			writer.refData(false);
 
-			writer.update();
-			writer.delete();
+//			writer.update();
+//			 writer.delete();
 		}
 	}
 
@@ -77,11 +79,17 @@ public class Main {
 	private static class DbWriter {
 
 		private static final ModelType[] REF_DATA_TYPES = {
+				ModelType.ACTOR,
+				ModelType.SOURCE,
 				ModelType.UNIT_GROUP,
 				ModelType.FLOW_PROPERTY,
 				ModelType.CURRENCY,
 				ModelType.LOCATION,
-				ModelType.DQ_SYSTEM
+				ModelType.DQ_SYSTEM,
+				ModelType.FLOW,
+				ModelType.PROCESS,
+				ModelType.IMPACT_CATEGORY,
+				ModelType.IMPACT_METHOD
 		};
 		private final Config config;
 		private final CommitWriter writer;
@@ -108,8 +116,12 @@ public class Main {
 			var diffs = Diffs.workspace(config);
 			for (ModelType type : REF_DATA_TYPES) {
 				var filtered = diffs.stream()
-						.filter(d -> d.getNewPath().startsWith(type.name() + "/"))
+						.filter(d -> type != ModelType.PROCESS ? d.getNewPath().startsWith(type.name() + "/")
+								: d.getNewPath().startsWith(
+										GitUtil.encode(
+												"PROCESS/D:Electricity, gas, steam and air conditioning supply/35:Electricity, gas, steam and air conditioning supply/351:Electric power generation, transmission and distribution/3510:Electric power generation, transmission and distribution/3510b: Electric power generation, photovoltaic/")))
 						.collect(Collectors.toList());
+				System.out.println("Committing " + filtered.size() + " files");
 				System.out.println(writer.commit("Added data for type " + type.name(), filtered));
 			}
 		}

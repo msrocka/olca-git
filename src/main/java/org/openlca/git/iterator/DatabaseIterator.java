@@ -16,6 +16,7 @@ import org.openlca.core.model.ModelType;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.Descriptor;
 import org.openlca.git.Config;
+import org.openlca.git.util.GitUtil;
 
 public class DatabaseIterator extends EntryIterator {
 

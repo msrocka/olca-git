@@ -14,19 +14,20 @@ import org.openlca.core.database.IDatabase;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
 import org.openlca.core.model.descriptors.CategoryDescriptor;
-import org.openlca.util.CategoryPathBuilder;
+import org.openlca.util.Categories;
+import org.openlca.util.Categories.PathBuilder;
 
 public class ObjectIdStore {
 
 	private final File file;
 	private final boolean asProto;
-	private final CategoryPathBuilder categoryPath;
+	private final PathBuilder categoryPath;
 	private Map<String, byte[]> store = new HashMap<>();
 
 	private ObjectIdStore(IDatabase database, String repository, boolean asProto) {
 		var repoDir = new File(database.getFileStorageLocation(), repository);
 		this.file = new File(repoDir, "object-id.store");
-		this.categoryPath = new CategoryPathBuilder(database);
+		this.categoryPath = Categories.pathsOf(database);
 		this.asProto = asProto;
 	}
 
@@ -161,7 +162,7 @@ public class ObjectIdStore {
 	}
 
 	private String getKey(CategorizedDescriptor d) {
-		var path = categoryPath.path(d.category);
+		var path = categoryPath.pathOf(d.category);
 		if (d.type == ModelType.CATEGORY)
 			return getKey(((CategoryDescriptor) d).categoryType, path, d.name);
 		return getKey(d.type, path, d.refId + (asProto ? ".proto" : ".json"));

@@ -4,6 +4,7 @@ import org.eclipse.jgit.lib.FileMode;
 import org.openlca.core.model.Category;
 import org.openlca.core.model.ModelType;
 import org.openlca.core.model.descriptors.CategorizedDescriptor;
+import org.openlca.git.util.GitUtil;
 
 class TreeEntry implements Comparable<TreeEntry> {
 
