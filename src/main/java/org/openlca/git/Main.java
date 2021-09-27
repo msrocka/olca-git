@@ -23,7 +23,8 @@ import com.google.common.io.Files;
 
 public class Main {
 
-	private static final String db = "ecoinvent_37_apos_lci_20201005";
+	 private static final String db = "ecoinvent_36_cutoff_lci_20200206";
+//	private static final String db = "ecoinvent_36_cutoff_unit_20200512";
 	private static final PersonIdent committer = new PersonIdent("greve", "greve@greendelta.com");
 	private static final File repoDir = new File("C:/Users/Sebastian/test/olca-git/" + db);
 	private static final File tmp = new File("C:/Users/Sebastian/test/tmp");
@@ -51,8 +52,8 @@ public class Main {
 			repo.create(true);
 			writer.refData(false);
 
-//			writer.update();
-//			 writer.delete();
+			// writer.update();
+			// writer.delete();
 		}
 	}
 
@@ -114,16 +115,17 @@ public class Main {
 
 		private void refDataSeparateCommits() throws IOException {
 			var diffs = Diffs.workspace(config);
+			long time = 0;
 			for (ModelType type : REF_DATA_TYPES) {
 				var filtered = diffs.stream()
-						.filter(d -> type != ModelType.PROCESS ? d.getNewPath().startsWith(type.name() + "/")
-								: d.getNewPath().startsWith(
-										GitUtil.encode(
-												"PROCESS/D:Electricity, gas, steam and air conditioning supply/35:Electricity, gas, steam and air conditioning supply/351:Electric power generation, transmission and distribution/3510:Electric power generation, transmission and distribution/3510b: Electric power generation, photovoltaic/")))
+						.filter(d -> d.getNewPath().startsWith(type.name() + "/"))
 						.collect(Collectors.toList());
+				long t = System.currentTimeMillis();
 				System.out.println("Committing " + filtered.size() + " files");
 				System.out.println(writer.commit("Added data for type " + type.name(), filtered));
+				time += System.currentTimeMillis() - t;
 			}
+			System.out.println("Total time: " + time + "ms");
 		}
 
 		private void update() throws IOException {

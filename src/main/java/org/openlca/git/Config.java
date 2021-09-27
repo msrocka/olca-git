@@ -14,7 +14,7 @@ public class Config {
 	public final PersonIdent committer;
 	public final boolean asProto;
 	public boolean checkExisting = true;
-	public int converterThreads = 8;
+	public int converterThreads = 50;
 
 	private Config(IDatabase database, FileRepository repo, PersonIdent committer, boolean asProto) throws IOException {
 		this.database = database;

@@ -26,15 +26,14 @@ import org.openlca.git.util.ObjectIds;
 import org.openlca.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.thavam.util.concurrent.blockingMap.BlockingHashMap;
-import org.thavam.util.concurrent.blockingMap.BlockingMap;
 
+// TODO check error handling
 public class CommitWriter {
 
 	private static final Logger log = LoggerFactory.getLogger(CommitWriter.class);
 	private final Config config;
-	private BlockingMap<String, byte[]> queue;
 	private PackInserter inserter;
+	private Converter converter;
 
 	public CommitWriter(Config config) {
 		this.config = config;
@@ -44,11 +43,11 @@ public class CommitWriter {
 		if (diffs.isEmpty())
 			return null;
 		var threads = Executors.newCachedThreadPool();
-		queue = new BlockingHashMap<>();
 		try {
 			inserter = config.repo.getObjectDatabase().newPackInserter();
 			inserter.checkExisting(config.checkExisting);
-			new Converter(config, queue, threads).convert(diffs.stream()
+			converter = new Converter(config, threads);
+			converter.start(diffs.stream()
 					.filter(d -> d.getChangeType() != ChangeType.DELETE)
 					.collect(Collectors.toList()));
 			var previousCommitTreeId = getPreviousCommitTreeId();
@@ -62,7 +61,7 @@ public class CommitWriter {
 				inserter.flush();
 				inserter.close();
 			}
-			queue.clear();
+			converter.clear();
 			threads.shutdown();
 		}
 	}
@@ -129,7 +128,7 @@ public class CommitWriter {
 		boolean matchesPath = Diffs.matches(diff, path);
 		if (matchesPath && diff.getChangeType() == ChangeType.DELETE)
 			return null;
-		var data = queue.take(path);
+		var data = converter.take(path);
 		if (diff.getChangeType() == ChangeType.MODIFY && ObjectIds.equal(data, blobId))
 			return blobId;
 		blobId = inserter.insert(Constants.OBJ_BLOB, data);
