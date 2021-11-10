@@ -27,7 +27,7 @@
 
     <dependency>
       <groupId>org.openlca</groupId>
-      <artifactId>olca-proto</artifactId>
+      <artifactId>olca-proto-io</artifactId>
       <version>2.0.0</version>
     </dependency>
 
